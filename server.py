@@ -184,9 +184,16 @@ async def ws_infer(websocket: WebSocket, context_id: str):
             reply_text = response.choices[0].message.content
 
             # Stream token by token (simulate)
+            # for token in reply_text.split():
+            #     await websocket.send_text(token + " ")
+            #     await asyncio.sleep(0.02)
+            # Accumulate tokens and send as one stream
+            stream_text = ""
             for token in reply_text.split():
-                await websocket.send_text(token + " ")
+                stream_text += token + " "
+                await websocket.send_text(stream_text)  # send the full accumulated text
                 await asyncio.sleep(0.02)
+
 
             # Update context
             ctx.payload.conversation.append(Message(role="user", text=prompt))

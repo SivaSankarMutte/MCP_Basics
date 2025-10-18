@@ -25,19 +25,30 @@
 <script>
 let context_id = null;
 let ws = null;
+let currentAssistantDiv = null;
 
 const chatDiv = document.getElementById('chat');
 const promptInput = document.getElementById('prompt');
 const sendBtn = document.getElementById('sendBtn');
 const newChatBtn = document.getElementById('newChatBtn');
 
-// Append message to chat
-function appendMessage(role, text) {
+// Append user message
+function appendUserMessage(text) {
     const div = document.createElement("div");
-    div.className = role;
+    div.className = "user";
     div.textContent = text;
     chatDiv.appendChild(div);
     chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+// Append new assistant div (for streaming)
+function appendAssistantMessageStream(text="") {
+    const div = document.createElement("div");
+    div.className = "assistant";
+    div.textContent = text;
+    chatDiv.appendChild(div);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+    return div;
 }
 
 // Create a new context dynamically
@@ -52,7 +63,6 @@ async function createContext() {
     });
     const data = await response.json();
     context_id = data.context_id;
-    appendMessage("assistant", "[New chat started]");
 }
 
 // Start WebSocket connection
@@ -69,11 +79,15 @@ async function startWebSocket() {
         try {
             const data = JSON.parse(event.data);
             if(data.event === "done") {
-                appendMessage("assistant", "\n[Streaming finished]");
+                currentAssistantDiv.textContent += " [Streaming finished]";
             }
         } catch {
-            // Treat as token or message
-            appendMessage("assistant", event.data);
+            // Streaming token update
+            if (!currentAssistantDiv) {
+                currentAssistantDiv = appendAssistantMessageStream(event.data);
+            } else {
+                currentAssistantDiv.textContent = event.data;
+            }
         }
     };
 
@@ -84,22 +98,26 @@ async function startWebSocket() {
 sendBtn.onclick = () => {
     const prompt = promptInput.value.trim();
     if (!prompt || !ws) return;
-    appendMessage("user", prompt);
+
+    appendUserMessage(prompt);
+    currentAssistantDiv = null;  // reset for new assistant response
     ws.send(JSON.stringify({prompt}));
     promptInput.value = "";
 };
 
 // Start a new chat
 newChatBtn.onclick = async () => {
-    appendMessage("assistant", "[Starting new chat...]");
     if(ws) ws.close();
     await createContext();
+    currentAssistantDiv = null;
+    appendAssistantMessageStream("[New chat started]");
     await startWebSocket();
 };
 
 // On page load, create first context and connect WebSocket
 window.onload = async () => {
     await createContext();
+    appendAssistantMessageStream("[New chat started]");
     await startWebSocket();
 };
 </script>
