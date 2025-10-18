@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Dynamic Chat UI</title>
+<style>
+  body { font-family: Arial; margin: 20px; }
+  #chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin-bottom: 10px; }
+  .user { color: blue; margin: 5px 0; }
+  .assistant { color: green; margin: 5px 0; }
+  button { margin-left: 5px; }
+</style>
+</head>
+<body>
+
+<h2>MCP Chat UI</h2>
+
+<div id="chat"></div>
+
+<input type="text" id="prompt" placeholder="Type your message..." style="width: 70%">
+<button id="sendBtn">Send</button>
+<button id="newChatBtn">New Chat</button>
+
+<script>
+let context_id = null;
+let ws = null;
+
+const chatDiv = document.getElementById('chat');
+const promptInput = document.getElementById('prompt');
+const sendBtn = document.getElementById('sendBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+
+// Append message to chat
+function appendMessage(role, text) {
+    const div = document.createElement("div");
+    div.className = role;
+    div.textContent = text;
+    chatDiv.appendChild(div);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+// Create a new context dynamically
+async function createContext() {
+    const response = await fetch("http://127.0.0.1:8000/contexts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            metadata: { user: "web_user" },
+            payload: { conversation: [] }
+        })
+    });
+    const data = await response.json();
+    context_id = data.context_id;
+    appendMessage("assistant", "[New chat started]");
+}
+
+// Start WebSocket connection
+async function startWebSocket() {
+    if (!context_id) return;
+
+    if(ws) ws.close();  // close old connection if exists
+
+    ws = new WebSocket(`ws://127.0.0.1:8000/ws_infer/${context_id}`);
+
+    ws.onopen = () => console.log("WebSocket connected");
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if(data.event === "done") {
+                appendMessage("assistant", "\n[Streaming finished]");
+            }
+        } catch {
+            // Treat as token or message
+            appendMessage("assistant", event.data);
+        }
+    };
+
+    ws.onclose = () => console.log("WebSocket disconnected");
+}
+
+// Send user message
+sendBtn.onclick = () => {
+    const prompt = promptInput.value.trim();
+    if (!prompt || !ws) return;
+    appendMessage("user", prompt);
+    ws.send(JSON.stringify({prompt}));
+    promptInput.value = "";
+};
+
+// Start a new chat
+newChatBtn.onclick = async () => {
+    appendMessage("assistant", "[Starting new chat...]");
+    if(ws) ws.close();
+    await createContext();
+    await startWebSocket();
+};
+
+// On page load, create first context and connect WebSocket
+window.onload = async () => {
+    await createContext();
+    await startWebSocket();
+};
+</script>
+
+</body>
+</html>

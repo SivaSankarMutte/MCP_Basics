@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+requests
+groq
+dot-env
+redis
+fastapi[all]
+uvicorn[standard]
+websockets
